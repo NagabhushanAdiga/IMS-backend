@@ -10,7 +10,10 @@ export const getProducts = async (req, res) => {
 
     const query = keyword
       ? {
-        name: { $regex: keyword, $options: 'i' }
+        $or: [
+          { name: { $regex: keyword, $options: 'i' } },
+          { sku: { $regex: keyword, $options: 'i' } }
+        ]
       }
       : {};
 
@@ -55,16 +58,24 @@ export const getProduct = async (req, res) => {
 // @access  Private
 export const createProduct = async (req, res) => {
   try {
-    const { name, category, totalStock, sold = 0, returned = 0, price } = req.body;
+    const { name, category, totalStock, sold = 0, returned = 0, price, sku } = req.body;
 
-    const product = await Product.create({
+    // Create product data object, only include SKU if provided
+    const productData = {
       name,
       category,
       totalStock,
       sold,
       returned,
       price
-    });
+    };
+
+    // Only add SKU if it's provided and not empty
+    if (sku && sku.trim() !== '') {
+      productData.sku = sku.trim();
+    }
+
+    const product = await Product.create(productData);
 
     // Update category product count
     await Category.findByIdAndUpdate(category, { $inc: { productCount: 1 } });
@@ -92,6 +103,16 @@ export const updateProduct = async (req, res) => {
       product.sold = req.body.sold !== undefined ? req.body.sold : product.sold;
       product.returned = req.body.returned !== undefined ? req.body.returned : product.returned;
       product.price = req.body.price !== undefined ? req.body.price : product.price;
+
+      // Only update SKU if provided and not empty
+      if (req.body.sku !== undefined) {
+        if (req.body.sku && req.body.sku.trim() !== '') {
+          product.sku = req.body.sku.trim();
+        } else {
+          // If empty SKU is sent, remove it
+          product.sku = undefined;
+        }
+      }
 
       const updatedProduct = await product.save();
 
@@ -225,6 +246,69 @@ export const searchProducts = async (req, res) => {
   }
 };
 
+// @desc    Fix database by removing SKU index and cleaning up
+// @route   POST /api/products/fix-database
+// @access  Private
+export const fixDatabase = async (req, res) => {
+  try {
+    const mongoose = (await import('mongoose')).default;
+
+    // Drop the SKU index if it exists
+    try {
+      await mongoose.connection.db.collection('products').dropIndex('sku_1');
+      console.log('SKU index dropped successfully');
+    } catch (error) {
+      if (error.code === 27) {
+        console.log('SKU index does not exist, continuing...');
+      } else {
+        console.log('Error dropping SKU index:', error.message);
+      }
+    }
+
+    // Remove SKU field from existing documents
+    await mongoose.connection.db.collection('products').updateMany(
+      {},
+      { $unset: { sku: "" } }
+    );
+
+    // Recalculate stock for all products
+    const products = await Product.find();
+    let updatedCount = 0;
+
+    for (let product of products) {
+      const correctStock = product.totalStock - product.sold + product.returned;
+
+      product.stock = correctStock;
+
+      // Update status based on correct stock
+      if (product.stock === 0) {
+        product.status = 'Out of Stock';
+      } else if (product.stock < 10) {
+        product.status = 'Low Stock';
+      } else {
+        product.status = 'In Stock';
+      }
+
+      await product.save();
+      updatedCount++;
+    }
+
+    res.json({
+      message: 'Database fixed successfully',
+      skuIndexDropped: true,
+      skuFieldRemoved: true,
+      stockRecalculated: true,
+      totalProducts: products.length,
+      updatedProducts: updatedCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fixing database',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Get product statistics
 // @route   GET /api/products/stats
 // @access  Private
@@ -235,9 +319,22 @@ export const getProductStats = async (req, res) => {
     const totalStockAdded = products.reduce((sum, p) => sum + p.totalStock, 0);
     const totalSold = products.reduce((sum, p) => sum + p.sold, 0);
     const totalReturned = products.reduce((sum, p) => sum + p.returned, 0);
-    const totalRemaining = products.reduce((sum, p) => sum + p.stock, 0);
-    const lowStockCount = products.filter(p => p.status === 'Low Stock').length;
-    const outOfStockCount = products.filter(p => p.status === 'Out of Stock').length;
+
+    // Calculate remaining stock correctly: totalStock - sold + returned
+    const totalRemaining = products.reduce((sum, p) => {
+      const correctStock = p.totalStock - p.sold + p.returned;
+      return sum + correctStock;
+    }, 0);
+
+    const lowStockCount = products.filter(p => {
+      const correctStock = p.totalStock - p.sold + p.returned;
+      return correctStock > 0 && correctStock < 10;
+    }).length;
+
+    const outOfStockCount = products.filter(p => {
+      const correctStock = p.totalStock - p.sold + p.returned;
+      return correctStock === 0;
+    }).length;
 
     res.json({
       totalStockAdded,

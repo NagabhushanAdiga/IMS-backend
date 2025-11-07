@@ -6,7 +6,13 @@ const productSchema = new mongoose.Schema({
     required: [true, 'Please add a product name'],
     trim: true
   },
-
+  sku: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    sparse: true,  // Allows multiple null/undefined values, but unique non-null values
+    unique: true   // Unique only when value exists
+  },
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',

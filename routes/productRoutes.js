@@ -6,7 +6,8 @@ import {
   updateProduct,
   deleteProduct,
   getProductStats,
-  searchProducts
+  searchProducts,
+  fixDatabase
 } from '../controllers/productController.js';
 import { protect } from '../middleware/auth.js';
 import { productValidation, validate } from '../middleware/validator.js';
@@ -15,6 +16,7 @@ const router = express.Router();
 
 router.get('/stats', protect, getProductStats);
 router.get('/search', protect, searchProducts);
+router.post('/fix-database', protect, fixDatabase);
 router.route('/')
   .get(protect, getProducts)
   .post(protect, productValidation, validate, createProduct);
