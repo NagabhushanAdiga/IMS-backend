@@ -14,7 +14,7 @@ export const login = async (req, res) => {
 
     // For demo, check if any user exists, if not create default admin
     let user = await User.findOne().select('+pin');
-    
+
     if (!user) {
       // Create default admin user with PIN 1234
       user = await User.create({
@@ -51,6 +51,35 @@ export const getProfile = async (req, res) => {
         _id: user._id,
         name: user.name,
         role: user.role
+      });
+    } else {
+      res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, role } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      user.name = name || user.name;
+      user.role = role || user.role;
+
+      const updatedUser = await user.save();
+
+      res.json({
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        message: 'Profile updated successfully'
       });
     } else {
       res.status(404).json({ message: 'User not found' });

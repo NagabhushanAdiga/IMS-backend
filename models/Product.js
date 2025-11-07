@@ -6,13 +6,7 @@ const productSchema = new mongoose.Schema({
     required: [true, 'Please add a product name'],
     trim: true
   },
-  sku: {
-    type: String,
-    required: [true, 'Please add a SKU'],
-    unique: true,
-    trim: true,
-    uppercase: true
-  },
+
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
@@ -41,7 +35,6 @@ const productSchema = new mongoose.Schema({
   },
   price: {
     type: Number,
-    required: [true, 'Please add a price'],
     min: 0
   },
   status: {
@@ -54,9 +47,9 @@ const productSchema = new mongoose.Schema({
 });
 
 // Calculate stock and status before saving
-productSchema.pre('save', function(next) {
+productSchema.pre('save', function (next) {
   this.stock = this.totalStock - this.sold + this.returned;
-  
+
   if (this.stock === 0) {
     this.status = 'Out of Stock';
   } else if (this.stock < 10) {
