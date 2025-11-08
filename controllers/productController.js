@@ -283,7 +283,7 @@ export const fixDatabase = async (req, res) => {
       // Update status based on correct stock
       if (product.stock === 0) {
         product.status = 'Out of Stock';
-      } else if (product.stock < 10) {
+      } else if (product.stock < 5) {
         product.status = 'Low Stock';
       } else {
         product.status = 'In Stock';

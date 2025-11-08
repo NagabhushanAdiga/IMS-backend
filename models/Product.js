@@ -20,7 +20,6 @@ const productSchema = new mongoose.Schema({
   },
   totalStock: {
     type: Number,
-    required: [true, 'Please add total stock'],
     min: 0,
     default: 0
   },
